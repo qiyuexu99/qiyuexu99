@@ -1,0 +1,332 @@
+# naive_bayes.py
+# ---------------
+# Licensing Information:  You are free to use or extend this projects for
+# educational purposes provided that (1) you do not distribute or publish
+# solutions, (2) you retain this notice, and (3) you provide clear
+# attribution to the University of Illinois at Urbana-Champaign
+#
+# Created by Justin Lizama (jlizama2@illinois.edu) on 09/28/2018
+import math
+from pdb import post_mortem
+from tkinter import N
+from tqdm import tqdm
+from collections import Counter
+import reader
+import numpy as np
+import nltk  # tokenizer and the Porter Stemmer
+import string
+
+"""
+This is the main entry point for MP1. You should only modify code
+within this file -- the unrevised staff files will be used for all other
+files and classes when code is run, so be careful to not modify anything else.
+"""
+
+
+"""
+load_data calls the provided utility to load in the dataset.
+You can modify the default values for stemming and lowercase, to improve performance when
+    we haven't passed in specific values for these parameters.
+"""
+
+
+def load_data(trainingdir, testdir, stemming=True, lowercase=True, silently=False):
+    print(f"Stemming is {stemming}")
+    print(f"Lowercase is {lowercase}")
+    train_set, train_labels, dev_set, dev_labels = reader.load_dataset(
+        trainingdir, testdir, stemming, lowercase, silently)
+    return train_set, train_labels, dev_set, dev_labels
+
+
+def print_paramter_vals(laplace, pos_prior):
+    print(f"Unigram Laplace {laplace}")
+    print(f"Positive prior {pos_prior}")
+
+
+"""
+You can modify the default values for the Laplace smoothing parameter and the prior for the positive label.
+Notice that we may pass in specific values for these parameters during our testing.
+"""
+
+
+def naiveBayes(train_set, train_labels, dev_set, laplace=1.0, pos_prior=0.5, silently=False):
+    print_paramter_vals(laplace, pos_prior)
+    # yhats = []
+    # for doc in tqdm(dev_set, disable=silently):
+    #     yhats.append(-1)
+    # return yhats
+    pWords, nWords, pDic, nDic = WordDicts(train_set, train_labels)
+    final = []
+    for i in range(len(dev_set)):
+        p_post = np.log(pos_prior)
+        n_post = np.log(1-pos_prior)
+        p_list = []
+        n_list = []
+        for word in dev_set[i]:
+
+            if word in pDic:
+                p_like = np.log((pDic[word]+laplace) /
+                                (pWords+laplace*len(pDic)))
+            else:
+                p_like = np.log(laplace/(pWords+laplace*len(pDic)))
+            p_list.append(p_like)
+
+            if word in nDic:
+                n_like = np.log((nDic[word]+laplace) /
+                                (nWords+laplace*len(nDic)))
+            else:
+                n_like = np.log(laplace/(nWords+laplace*len(nDic)))
+            n_list.append(n_like)
+
+        for p in p_list:
+            p_post = p_post+p
+        for n in n_list:
+            n_post = n_post+n
+        if p_post > n_post:
+            final.append(1)
+        else:
+            final.append(0)
+    return final
+
+
+def WordDicts(train_set, train_labels):
+    pWords = 0
+    nWords = 0
+    pDic = {}
+    nDic = {}
+    for i in range(len(train_set)):
+        for word in train_set[i]:
+            if train_labels[i] == 1:
+                pWords = pWords+1
+                if word not in pDic:
+                    pDic[word] = 1
+                else:
+                    pDic[word] = pDic[word]+1
+            else:
+                nWords = nWords+1
+                if word not in nDic:
+                    nDic[word] = 1
+                else:
+                    nDic[word] = nDic[word]+1
+    return pWords, nWords, pDic, nDic
+
+
+def print_paramter_vals_bigram(unigram_laplace, bigram_laplace, bigram_lambda, pos_prior):
+    print(f"Unigram Laplace {unigram_laplace}")
+    print(f"Bigram Laplace {bigram_laplace}")
+    print(f"Bigram Lambda {bigram_lambda}")
+    print(f"Positive prior {pos_prior}")
+
+
+"""
+You can modify the default values for the Laplace smoothing parameters, model-mixture lambda parameter, and the prior for the positive label.
+Notice that we may pass in specific values for these parameters during our testing.
+"""
+
+
+def BiDicts(train_set, train_labels):
+    pWords = 0
+    nWords = 0
+    bpWords = 0
+    bnWords = 0
+    uni_p = uni_n = {}
+    buni_p = buni_n = {}
+    pDic = bpDic = {}
+    nDic = bnDic = {}
+    for i in range(len(train_set)):
+        for j in range(len(train_set[i])):
+            w1 = train_set[i][j]
+            if train_labels[i] == 1:
+                pWords = pWords+1
+                if w1 not in uni_p:
+                    uni_p[w1] = 1
+                pDic[w1] = pDic.get(w1, 0)+1
+                if j+1 in range(len(train_set[i])):
+                    w2 = train_set[i][j+1]
+                    bpWords = bpWords+1
+                    if (w1, w2) not in buni_p:
+                        buni_p[(w1, w2)] = 1
+                    bpDic[(w1, w2)] = bpDic.get((w1, w2), 0)+1
+            else:
+                nWords = nWords+1
+                if w1 not in uni_n:
+                    uni_n[w1] = 1
+                nDic[w1] = nDic.get(w1, 0)+1
+                if j+1 in range(len(train_set[i])):
+                    w2 = train_set[i][j+1]
+                    bnWords = bnWords+1
+                    if (w1, w2) not in buni_n:
+                        buni_n[(w1, w2)] = 1
+                    bnDic[(w1, w2)] = bnDic.get((w1, w2), 0)+1
+    return pWords, nWords, pDic, nDic, bpWords, bnWords, bpDic, bnDic, uni_p, uni_n, buni_p, buni_n
+
+    #     review = train_set[i]
+    #     biagrams = [review[j:j+2] for j in range(len(review)-1)]
+    #     biasize += len(biagrams)
+    #     for bia in biagrams:
+    #         if train_labels[i] == 1:
+    #             pWords = pWords+1
+    #             if str(bia) not in pDic:
+    #                 pDic[str(bia)] = 1
+    #             else:
+    #                 pDic[str(bia)] = pDic[str(bia)]+1
+    #         else:
+    #             nWords = nWords+1
+    #             if str(bia) not in nDic:
+    #                 nDic[str(bia)] = 1
+    #             else:
+    #                 nDic[str(bia)] = nDic[str(bia)]+1
+    # biasize += 1
+    # return pWords, nWords, pDic, nDic, biasize
+
+
+def bigramBayes(train_set, train_labels, dev_set, unigram_laplace=1.0, bigram_laplace=0.03, bigram_lambda=0.05, pos_prior=0.5, silently=False):
+    print_paramter_vals_bigram(
+        unigram_laplace, bigram_laplace, bigram_lambda, pos_prior)
+    # yhats = []
+    # for doc in tqdm(dev_set, disable=silently):
+    #     yhats.append(-1)
+    # return yhats
+    final = []
+    pWords, nWords, pDic, nDic, bpWords, bnWords, bpDic, bnDic, uni_p, uni_n, buni_p, buni_n = BiDicts(
+        train_set, train_labels)
+    for i in range(len(dev_set)):
+        pp = pp1 = np.log(pos_prior)
+        nn = nn1 = np.log(1-pos_prior)
+        pList = nList = []
+        bpList = bnList = []
+        for j in range(len(dev_set[i])):
+            w1 = dev_set[i][j]
+            pLike = np.log((pDic.get(w1, 0)+unigram_laplace) /
+                           (pWords+len(pDic)*unigram_laplace))
+            pList.append(pLike)
+            if j+1 in range(len(dev_set[i])):
+                w2 = dev_set[i][j+1]
+                bpLike = np.log(
+                    (bpDic.get((w1, w2), 0)+bigram_laplace)/(bpWords+len(bpDic)*bigram_laplace))
+                bpList.append(bpLike)
+            nLike = np.log((nDic.get(w1, 0)+unigram_laplace) /
+                           (nWords+len(nDic)*unigram_laplace))
+            nList.append(nLike)
+            if j+1 in range(len(dev_set[i])):
+                w2 = dev_set[i][j+1]
+                bnLike = np.log(
+                    (bnDic.get((w1, w2), 0)+bigram_laplace)/(bnWords+len(bnDic)*bigram_laplace))
+                bnList.append(bnLike)
+        for pw in pList:
+            pp = pp+pw
+        for nw in nList:
+            nn = nn+nw
+        for bp in bpList:
+            pp1 = pp1+bp
+        for bn in bnList:
+            nn1 = nn1+bn
+
+        pos_total = (1 - bigram_lambda)*pp + bigram_lambda*pp1
+        neg_total = (1 - bigram_lambda)*nn + bigram_lambda*nn1
+        if pos_total > neg_total:
+            final.append(1)
+        else:
+            final.append(0)
+
+    return final
+
+
+# def BiDicts(train_set, train_labels):
+#     pWords = 0
+#     nWords = 0
+#     biagrams = []
+#     pDic = {}
+#     nDic = {}
+#     biasize = 0
+#     for i in range(len(train_set)):
+#         review = train_set[i]
+#         biagrams = [review[j:j+2] for j in range(len(review)-1)]
+#         biasize += len(biagrams)
+#         for bia in biagrams:
+#             if train_labels[i] == 1:
+#                 pWords = pWords+1
+#                 if str(bia) not in pDic:
+#                     pDic[str(bia)] = 1
+#                 else:
+#                     pDic[str(bia)] = pDic[str(bia)]+1
+#             else:
+#                 nWords = nWords+1
+#                 if str(bia) not in nDic:
+#                     nDic[str(bia)] = 1
+#                 else:
+#                     nDic[str(bia)] = nDic[str(bia)]+1
+#     biasize += 1
+#     return pWords, nWords, pDic, nDic, biasize
+
+
+# def bigramBayes(train_set, train_labels, dev_set, unigram_laplace=1.0, bigram_laplace=0.03, bigram_lambda=0.05, pos_prior=0.5, silently=False):
+#     print_paramter_vals_bigram(
+#         unigram_laplace, bigram_laplace, bigram_lambda, pos_prior)
+#     # yhats = []
+#     # for doc in tqdm(dev_set, disable=silently):
+#     #     yhats.append(-1)
+#     # return yhats
+#     pWords, nWords, pDic, nDic = WordDicts(train_set, train_labels)
+#     bpWords, bnWords, bpDic, bnDic, bisize = BiDicts(train_set, train_labels)
+#     wordSize = len(set(i for train in train_set for i in train))/3.4+1
+#     final = []
+
+#     reviewDict = {}
+#     for i in range(len(train_set)):
+#         review = set(train_set[i])
+#         for r in review:
+#             if r not in reviewDict:
+#                 reviewDict[r] = 1
+#             else:
+#                 reviewDict[r] = reviewDict[r]+1
+#     dicts = {}
+#     for i in range(len(train_set)):
+#         re = train_set[i]
+#         bigrams = [re[j:j + 2] for j in range(len(re) - 1)]
+#         new = set()
+#         for c in bigrams:
+#             if str(c) not in new:  # check duplicate
+#                 dicts[str(c)] = dicts.get(str(c), 0) + 1
+#                 new.add(str(c))
+
+#     for dev in dev_set:
+#         pLike = nLike = 0
+#         pLike += np.log(pos_prior)
+#         nLike += np.log(1-pos_prior)
+
+#         for d in dev:
+#             word = reviewDict.get(d, 0)
+#             num = 1
+#             if word != 0:
+#                 num = np.log((len(train_set)+1)/word)
+#             if (pDic.get(d, 0)+unigram_laplace) != 0:
+#                 pLike += np.log((pDic.get(d, 0)*num+unigram_laplace) /
+#                                 (pWords+unigram_laplace*len(pDic)))
+#             if (nDic.get(d, 0)+unigram_laplace) != 0:
+#                 nLike += np.log((nDic.get(d, 0)*num+unigram_laplace) /
+#                                 (nWords+unigram_laplace*len(nDic)))
+#         pBiLike = 0
+#         nBiLike = 0
+#         pBiLike += np.log(pos_prior)
+#         nBiLike += np.log(1-pos_prior)
+#         devv = [dev[i:i+2] for i in range(len(dev)-1)]
+#         for d in devv:
+#             k = str(d)
+#             word = dicts.get(k, 0)
+#             # if word != 0:
+#             #     num = np.log((len(train_set)+1)/word)
+#             # # if (bpDic.get(k, 0)+bigram_laplace) != 0:
+#             pBiLike += np.log((bpDic.get(k, 0)+bigram_laplace) /
+#                               (bpWords+bigram_laplace*bisize))
+#             # if (bnDic.get(k, 0)+unigram_laplace) != 0:
+#             nBiLike += np.log((bnDic.get(k, 0)+bigram_laplace) /
+#                               (bnWords+unigram_laplace*bisize))
+#         pL = (1-bigram_lambda)*pLike+pBiLike*bigram_lambda
+#         nL = (1-bigram_lambda)*nLike+nBiLike*bigram_lambda
+
+#         if pL > nL:
+#             final.append(1)
+#         else:
+#             final.append(0)
+#     return final
